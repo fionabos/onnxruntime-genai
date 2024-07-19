@@ -9,7 +9,7 @@ target_include_directories(python PRIVATE ${ORT_HEADER_DIR})
 target_link_directories(python PRIVATE ${ORT_LIB_DIR})
 target_link_libraries(python PRIVATE onnxruntime-genai-static ${ONNXRUNTIME_LIB})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set_property(TARGET python APPEND_STRING PROPERTY LINK_FLAGS " -Xlinker -rpath=\\$ORIGIN")
+  set_property(TARGET python APPEND_STRING PROPERTY LINK_FLAGS " -Xlinker -rpath=\\$ORIGIN/../onnxruntime/capi/")
 endif()
 set_target_properties(python PROPERTIES OUTPUT_NAME "onnxruntime_genai")
 
@@ -23,6 +23,12 @@ if(USE_CUDA AND CMAKE_CUDA_COMPILER)
   enable_language(CUDA)
   set_target_properties(python PROPERTIES LINKER_LANGUAGE CUDA)
   target_link_libraries(python PRIVATE cublasLt cublas cudnn curand cufft cudart)
+endif()
+
+# Avoid warning of Calling FetchContent_Populate(Lib) is deprecated temporarily
+# TODO: find a better way to handle the header-only 3rd party deps
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.30.0")
+  cmake_policy(SET CMP0169 OLD)
 endif()
 
 set_target_properties(python PROPERTIES FOLDER "Sources")
@@ -49,10 +55,10 @@ if(BUILD_WHEEL)
   file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/py/" DESTINATION ${WHEEL_TARGET_NAME}/)
   file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/package_description.md" DESTINATION ${WHEEL_FILES_DIR}/)
   file(COPY "${CMAKE_SOURCE_DIR}/ThirdPartyNotices.txt" DESTINATION ${WHEEL_TARGET_NAME}/)
-  
+  file(COPY "${CMAKE_SOURCE_DIR}/LICENSE" DESTINATION ${WHEEL_TARGET_NAME}/)
   add_custom_command(TARGET python POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
-    ${onnxruntime_libs} $<TARGET_FILE:python>
+    ${ortgenai_embed_libs} $<TARGET_FILE:python>
     ${WHEEL_TARGET_NAME}
     COMMENT "Copying files to wheel directory: ${WHEEL_TARGET_NAME}"
   )
@@ -96,7 +102,7 @@ if(BUILD_WHEEL)
 
   if(MANYLINUX)
     add_custom_target(PyPackageBuild ALL
-      COMMAND ${PYTHON_EXECUTABLE} -m pip wheel .
+      COMMAND ${PYTHON_EXECUTABLE} -m pip wheel --no-deps .
       COMMAND ${CMAKE_COMMAND} -E remove ${WHEEL_TARGET_NAME}/onnxruntime_genai.cpython-*
       COMMAND auditwheel repair onnxruntime_genai*linux_x86_64.whl -w ${WHEEL_FILES_DIR} ${modified_exclude_list}
       WORKING_DIRECTORY "${WHEEL_FILES_DIR}"
@@ -104,7 +110,7 @@ if(BUILD_WHEEL)
     )
   else()
     add_custom_target(PyPackageBuild ALL
-      COMMAND ${PYTHON_EXECUTABLE} -m pip wheel .
+      COMMAND ${PYTHON_EXECUTABLE} -m pip wheel --no-deps .
       WORKING_DIRECTORY "${WHEEL_FILES_DIR}"
       COMMENT "Building wheel on ${WHEEL_FILES_DIR}"
     )
